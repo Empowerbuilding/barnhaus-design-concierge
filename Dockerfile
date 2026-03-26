@@ -1,0 +1,29 @@
+FROM node:20-alpine
+ARG ANTHROPIC_API_KEY=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
+ARG DISCORD_CHANNEL=1486597860072886352
+ARG DISCORD_TOKEN=MTQ4MzU5ODIzOTc5MzE1NjMyNw.G2ht_Z.hKMoyPCj50OgHwTy8MMxfXj-uAOposcgnA8NwA
+ARG HOST=0.0.0.0
+ARG N8N_WEBHOOK=https://n8n.empowerbuilding.ai/webhook/design-intake
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhiZmpkZnhlcGhsY3prZmdwY2VnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkzMzc3MTAsImV4cCI6MjA1NDkxMzcxMH0.ywOCCOFOlEPiMl-t4RFjpHcqfcY9B0Iu9yJaHFfqr6E
+ARG NEXT_PUBLIC_SUPABASE_URL=https://hbfjdfxephlczkfgpceg.supabase.co
+ARG OPENAI_API_KEY=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
+ARG PORT=3000
+ARG REPORTALL_CLIENT_KEY=ApYR0NgsbE
+ARG STUDIO_PASSWORD=barnhaus2025
+ARG SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhiZmpkZnhlcGhsY3prZmdwY2VnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTMzNzcxMCwiZXhwIjoyMDU0OTEzNzEwfQ.weXk7CqDqR8XkEpi4kaI_GmHWlkqh6snOMQm-hk48RM
+ARG SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhiZmpkZnhlcGhsY3prZmdwY2VnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTMzNzcxMCwiZXhwIjoyMDU0OTEzNzEwfQ.weXk7CqDqR8XkEpi4kaI_GmHWlkqh6snOMQm-hk48RM
+ARG COOLIFY_URL=https://design.barnhaussteelbuilders.com
+ARG COOLIFY_FQDN=design.barnhaussteelbuilders.com
+ARG COOLIFY_BRANCH=main
+ARG COOLIFY_RESOURCE_UUID=g4gggks04owowwgo4w4swwwg
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE 3000
+ENV PORT=3000
+ENV SUPABASE_URL=https://hbfjdfxephlczkfgpceg.supabase.co
+ENV N8N_WEBHOOK=https://n8n.empowerbuilding.ai/webhook/design-intake
+ENV DISCORD_CHANNEL=1486126687606538240
+CMD ["node", "server/index.js"]
