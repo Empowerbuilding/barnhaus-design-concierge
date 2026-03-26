@@ -14,8 +14,16 @@ export async function sendN8nWebhook(s) {
 
 export async function writeToCRM(s) {
   try {
-    const [firstName, ...rest] = (s.name || "").trim().split(" ");
-    const lastName = rest.join(" ") || "";
+    // Handle both s.name (full name) and s.first_name/s.last_name
+    let firstName, lastName;
+    if (s.first_name || s.last_name) {
+      firstName = s.first_name || "";
+      lastName = s.last_name || "";
+    } else {
+      const parts = (s.name || "").trim().split(" ");
+      firstName = parts[0] || "";
+      lastName = parts.slice(1).join(" ") || "";
+    }
 
     // Build notes from all collected data
     const noteLines = [
@@ -54,6 +62,7 @@ export async function writeToCRM(s) {
         body: JSON.stringify({ notes: noteLines, lead_source: "design_concierge", lifecycle_stage: "lead", updated_at: new Date().toISOString() }),
       });
       console.log("CRM: updated existing contact", existing[0].id);
+      if (noteLines) await insertCRMNote(existing[0].id, noteLines);
     } else {
       // Create new contact
       const res = await fetch(`${CRM_URL}/rest/v1/contacts`, {
@@ -72,9 +81,27 @@ export async function writeToCRM(s) {
         }),
       });
       const created = await res.json();
-      console.log("CRM: created contact", created?.[0]?.id);
+      const contactId = created?.[0]?.id;
+      console.log("CRM: created contact", contactId);
+      if (contactId && noteLines) {
+        await insertCRMNote(contactId, noteLines);
+      }
     }
   } catch (err) { console.error("CRM write error:", err.message); }
+}
+
+async function insertCRMNote(contactId, content) {
+  try {
+    await fetch(`${CRM_URL}/rest/v1/notes`, {
+      method: "POST",
+      headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        contact_id: contactId,
+        content: content,
+        created_at: new Date().toISOString(),
+      }),
+    });
+  } catch (err) { console.error("CRM note insert error:", err.message); }
 }
 
 function val(v) { return v && v !== "null" && v !== "undefined" ? v : null; }
