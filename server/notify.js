@@ -1,5 +1,5 @@
 const CRM_URL = "https://ejsnbluvkqocuchifdvp.supabase.co";
-const CRM_KEY = process.env.CRM_SUPABASE_KEY;
+const CRM_KEY = process.env.CRM_SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqc25ibHV2a3FvY3VjaGlmZHZwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjgwMTQ5NywiZXhwIjoyMDgyMzc3NDk3fQ.ZUTMAnnrwi7KPYYhkWL4Gexbn7ClrxOkG_CGWl2Q5X8";
 
 export async function sendN8nWebhook(s) {
   if (!process.env.N8N_WEBHOOK) return;
