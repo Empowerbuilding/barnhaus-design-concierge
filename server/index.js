@@ -122,6 +122,7 @@ app.post("/api/chat", async (req, res) => {
     }
 
 
+    console.log('AI response length:', aiResponse.length, '| has conversation_complete:', aiResponse.includes('conversation_complete'));
     // Extract conversation_complete
     const completeMatch = aiResponse.match(
       /```json\s*\n?\s*(\{[^`]*"conversation_complete"\s*:\s*true[^`]*\})\s*\n?\s*```/s
