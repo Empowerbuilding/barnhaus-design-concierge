@@ -130,12 +130,12 @@ export function useChat() {
     }
   }, [isLoading, isComplete, handleResponse]);
 
-  const sendImage = useCallback(async (file) => {
+  const sendImage = useCallback(async (file, caption) => {
     setUploadPrompted(false);
     if (isLoading || isComplete) return;
     setIsLoading(true);
     const previewUrl = URL.createObjectURL(file);
-    setMessages((prev) => [...prev, { role: "user", imageUrl: previewUrl }]);
+    setMessages((prev) => [...prev, { role: "user", imageUrl: previewUrl, text: caption || undefined }]);
     try {
       const formData = new FormData();
       formData.append("image", file);
@@ -144,12 +144,13 @@ export function useChat() {
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) throw new Error(uploadData.error || "Upload failed");
       const analysisNote = uploadData.analysis ? ` Vision analysis: ${uploadData.analysis}` : "";
+      const captionNote = caption ? ` Client said: "${caption}"` : "";
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId: sessionId.current,
-          message: `[Client uploaded an inspiration image: ${uploadData.url}.${analysisNote}]`,
+          message: `[Client uploaded an inspiration image: ${uploadData.url}.${analysisNote}${captionNote}]`,
           imageUrl: uploadData.url,
         }),
       });

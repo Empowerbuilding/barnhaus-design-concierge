@@ -40,6 +40,7 @@ const s = {
 export default function ChatWindow() {
   const { messages, isLoading, isComplete, submissionData, activeFields, dismissFields, uploadPrompted, sendMessage, sendImage, startConversation } = useChat();
   const [input, setInput] = useState("");
+  const [pendingImage, setPendingImage] = useState(null); // { file, previewUrl }
   const [logoError, setLogoError] = useState(false);
   const messagesEnd = useRef(null);
   const fileInputRef = useRef(null);
@@ -61,7 +62,12 @@ export default function ChatWindow() {
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) { sendImage(file); e.target.value = ""; }
+    if (file) {
+      const previewUrl = URL.createObjectURL(file);
+      setPendingImage({ file, previewUrl });
+      e.target.value = "";
+      inputRef.current?.focus();
+    }
   };
 
   return (
@@ -125,6 +131,13 @@ export default function ChatWindow() {
           )}
           <div style={s.inputArea}>
             <div style={s.inputRow}>
+              {pendingImage && (
+                <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background:"#1a1a1a", borderRadius:8, marginBottom:6, border:"1px solid #333" }}>
+                  <img src={pendingImage.previewUrl} style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0 }} />
+                  <span style={{ fontSize:12, color:"#888", flex:1 }}>Photo queued — type a caption then hit send</span>
+                  <button onClick={() => setPendingImage(null)} style={{ background:"none", border:"none", color:"#666", cursor:"pointer", fontSize:16, padding:"0 4px" }}>✕</button>
+                </div>
+              )}
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFileChange} />
               <button
                 onClick={() => fileInputRef.current?.click()}
