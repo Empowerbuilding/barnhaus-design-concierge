@@ -17,15 +17,15 @@ if (typeof document !== "undefined" && !document.getElementById("upload-pulse-st
 }
 
 const s = {
-  container: { display:"flex", flexDirection:"column", height:"100%", maxWidth:680, margin:"0 auto" },
+  container: { display:"flex", flexDirection:"column", height:"100%", maxWidth:680, margin:"0 auto", overflow:"hidden", width:"100%" },
   header: { padding:"16px 24px", borderBottom:"1px solid #2a2a2a", textAlign:"center", flexShrink:0, background:"#1a1a1a" },
   logoImg: { height:44, width:"auto", display:"block", margin:"0 auto 6px" },
   logoFallback: { fontSize:22, fontWeight:700, color:"#fff", letterSpacing:"0.04em", fontFamily:"'Inter',sans-serif" },
   logoAccent: { color:"#B8860B" },
   subtitle: { fontSize:12, color:"#888", letterSpacing:"0.12em", textTransform:"uppercase", fontFamily:"'Inter',sans-serif", fontWeight:500 },
   messagesArea: { flex:1, overflowY:"auto", padding:"20px 0", display:"flex", flexDirection:"column", gap:12 },
-  inputArea: { padding:"16px 20px", borderTop:"1px solid #2a2a2a", flexShrink:0, background:"#1a1a1a" },
-  inputRow: { display:"flex", gap:8, alignItems:"center" },
+  inputArea: { padding:"16px 20px", borderTop:"1px solid #2a2a2a", flexShrink:0, background:"#1a1a1a", overflow:"hidden", maxWidth:"100%", boxSizing:"border-box" },
+  inputRow: { display:"flex", gap:8, alignItems:"center", maxWidth:"100%", overflow:"hidden" },
   input: { flex:1, padding:"14px 18px", borderRadius:24, border:"1px solid #3a3a3a", background:"#222", color:"#fff", fontSize:15, outline:"none", fontFamily:"'Inter',sans-serif", transition:"border-color 0.2s" },
   uploadBtn: { width:46, height:46, borderRadius:"50%", border:"1px solid #3a3a3a", background:"#222", color:"#888", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"border-color 0.2s, color 0.2s" },
   sendBtn: { width:46, height:46, borderRadius:"50%", border:"none", background:"linear-gradient(135deg,#B8860B,#DAA520)", color:"#1a1a1a", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
@@ -51,9 +51,15 @@ export default function ChatWindow() {
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text || isLoading) return;
+    if ((!text && !pendingImage) || isLoading) return;
     setInput("");
-    sendMessage(text);
+    if (pendingImage) {
+      const img = pendingImage;
+      setPendingImage(null);
+      sendImage(img.file, text || undefined);
+    } else {
+      sendMessage(text);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -130,14 +136,14 @@ export default function ChatWindow() {
             </div>
           )}
           <div style={s.inputArea}>
+            {pendingImage && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background:"#1a1a1a", borderRadius:8, marginBottom:6, border:"1px solid #333", maxWidth:"100%", boxSizing:"border-box", overflow:"hidden" }}>
+                <img src={pendingImage.previewUrl} style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0 }} />
+                <span style={{ fontSize:12, color:"#888", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Photo queued — type a caption then hit send</span>
+                <button onClick={() => setPendingImage(null)} style={{ background:"none", border:"none", color:"#666", cursor:"pointer", fontSize:16, padding:"0 4px", flexShrink:0 }}>✕</button>
+              </div>
+            )}
             <div style={s.inputRow}>
-              {pendingImage && (
-                <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background:"#1a1a1a", borderRadius:8, marginBottom:6, border:"1px solid #333" }}>
-                  <img src={pendingImage.previewUrl} style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0 }} />
-                  <span style={{ fontSize:12, color:"#888", flex:1 }}>Photo queued — type a caption then hit send</span>
-                  <button onClick={() => setPendingImage(null)} style={{ background:"none", border:"none", color:"#666", cursor:"pointer", fontSize:16, padding:"0 4px" }}>✕</button>
-                </div>
-              )}
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFileChange} />
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -159,8 +165,8 @@ export default function ChatWindow() {
                 onBlur={(e) => (e.target.style.borderColor="#3a3a3a")}
                 disabled={isLoading} />
               <button onClick={handleSend}
-                style={{ ...s.sendBtn, ...(isLoading || !input.trim() ? s.sendBtnDisabled : {}) }}
-                disabled={isLoading || !input.trim()}>
+                style={{ ...s.sendBtn, ...(isLoading || (!input.trim() && !pendingImage) ? s.sendBtnDisabled : {}) }}
+                disabled={isLoading || (!input.trim() && !pendingImage)}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                 </svg>

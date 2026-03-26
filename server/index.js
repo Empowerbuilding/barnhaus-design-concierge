@@ -183,6 +183,7 @@ app.post("/api/complete", async (req, res) => {
     }
 
     // Delete partial Discord message if it exists
+    const session = sessionId ? sessions.get(sessionId) : null;
     if (session?.partialDiscordMsgId) {
       deleteDiscordMessage(session.partialDiscordMsgId).catch(() => {});
       session.partialDiscordMsgId = null;
