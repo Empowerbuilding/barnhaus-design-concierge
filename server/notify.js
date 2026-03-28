@@ -131,7 +131,7 @@ async function insertCRMNote(contactId, content) {
 
 function val(v) { return v && v !== "null" && v !== "undefined" ? v : null; }
 
-async function notifyVanessa(s) {
+export async function notifyVanessa(s) {
   const token = process.env.VANESSA_DISCORD_TOKEN;
   const channel = process.env.VANESSA_LEAD_ALERTS_CHANNEL;
   if (!token || !channel || !s.email) return;
