@@ -54,24 +54,40 @@ export async function writeToCRM(s) {
       { headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}` } }
     ).then(r => r.json());
 
-    if (existing?.length > 0) {
+    // Try phone fallback if no email match
+    let matchedContact = existing?.[0] || null;
+    if (!matchedContact && s.phone) {
+      const phone = s.phone.replace(/\D/g, "");
+      const byPhone = await fetch(
+        `${CRM_URL}/rest/v1/contacts?select=id,lead_source,email&phone=ilike.*${phone.slice(-10)}*&limit=1`,
+        { headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}` } }
+      ).then(r => r.json());
+      if (byPhone?.length > 0) {
+        console.log("CRM: matched contact by phone", byPhone[0].id);
+        matchedContact = byPhone[0];
+      }
+    }
+
+    if (matchedContact) {
       // Fetch full existing contact to preserve lead_source
       const existingFull = await fetch(
-        `${CRM_URL}/rest/v1/contacts?id=eq.${existing[0].id}&select=id,lead_source`,
+        `${CRM_URL}/rest/v1/contacts?id=eq.${matchedContact.id}&select=id,lead_source,email`,
         { headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}` } }
       ).then(r => r.json());
       const existingLeadSource = existingFull?.[0]?.lead_source;
-      // Only update lead_source if contact doesn't already have one
+      const existingEmail = existingFull?.[0]?.email;
+      // Preserve original lead_source; add email if missing
       const updatePayload = { notes: noteLines, lifecycle_stage: "lead", updated_at: new Date().toISOString() };
       if (!existingLeadSource) updatePayload.lead_source = "design_concierge";
+      if (!existingEmail && s.email) updatePayload.email = s.email;
       // Update existing contact
-      await fetch(`${CRM_URL}/rest/v1/contacts?id=eq.${existing[0].id}`, {
+      await fetch(`${CRM_URL}/rest/v1/contacts?id=eq.${matchedContact.id}`, {
         method: "PATCH",
         headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify(updatePayload),
       });
-      console.log("CRM: updated existing contact", existing[0].id);
-      if (noteLines) await insertCRMNote(existing[0].id, noteLines);
+      console.log("CRM: updated existing contact", matchedContact.id);
+      if (noteLines) await insertCRMNote(matchedContact.id, noteLines);
     } else {
       // Create new contact
       const res = await fetch(`${CRM_URL}/rest/v1/contacts`, {
