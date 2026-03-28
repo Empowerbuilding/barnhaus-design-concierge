@@ -155,12 +155,10 @@ async function notifyVanessa(s) {
       `**Budget:** ${budget}`,
       sqft !== "—" ? `**Size:** ${sqft} SF` : null,
       style !== "—" ? `**Style:** ${style}` : null,
-      summary ? `
-**Summary:** ${summary}` : null,
+      summary ? `\n**Summary:** ${summary}` : null,
       ``,
       `📧 Send a personalized follow-up email within the next hour.`,
-    ].filter(v => v !== null).join("
-");
+    ].filter(v => v !== null).join("\n");
 
     await fetch(`https://discord.com/api/v10/channels/${channel}/messages`, {
       method: "POST",
