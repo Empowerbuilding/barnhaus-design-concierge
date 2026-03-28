@@ -82,7 +82,7 @@ export function useChat() {
   }, []);
 
   const handleResponse = useCallback(async (data) => {
-    const aiMsg = { role: "assistant", text: data.message };
+    const aiMsg = { role: "assistant", text: data.message, suggestedPlans: data.suggestedPlans || [] };
     setMessages((prev) => [...prev, aiMsg]);
     const asksForUpload = /upload|photo|picture|image|survey|aerial/i.test(data.message);
     setUploadPrompted(asksForUpload);
@@ -174,6 +174,7 @@ export function useChat() {
     if (hasGreeted.current) return;
     hasGreeted.current = true;
     setIsLoading(true);
+    fetch("/api/plans").then(r => r.json()).then(plans => { window._floorPlans = plans; }).catch(() => {});
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
