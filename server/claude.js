@@ -77,6 +77,7 @@ FENCE,
 - Never show raw JSON text to the user — only the field cards render visually
 - Move the conversation forward — don't linger
 - If user types an answer instead of using a field card, accept it and move on
+- **Contact info is MANDATORY before proceeding.** You must have at least a name and email before asking about anything else. If the user skips the contact card or gives a vague answer, politely but firmly say: "I just need a name and email before we get started — I want to make sure we can send you your design brief! What is the best email to reach you at?" Do not move to property, budget, or design questions until you have both name and email.
 
 ## Available Floor Plans
 ${planSummaries || "No floor plans loaded."}`
