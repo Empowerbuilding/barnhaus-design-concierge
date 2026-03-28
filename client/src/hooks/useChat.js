@@ -1,10 +1,12 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+
+const SESSION_KEY = "barnhaus_concierge_session";
 
 function generateId() {
   return "s_" + Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
 }
 
-// Field card definitions in order
+// Field card definitions — only contact + location are shown (first 2 turns)
 const FIELD_STEPS = [
   {
     id: "contact",
@@ -22,62 +24,66 @@ const FIELD_STEPS = [
       { key: "land_owned", label: "Own the Land?", type: "boolean" },
     ]
   },
-  {
-    id: "budget",
-    fields: [
-      { key: "budget", label: "Construction Budget", type: "text", placeholder: "e.g. $400k or $300-500k", flex: "1 1 220px" },
-      { key: "timeline", label: "Build Timeline", type: "text", placeholder: "e.g. 12-18 months", flex: "1 1 160px" },
-    ]
-  },
-  {
-    id: "size",
-    fields: [
-      { key: "sqft", label: "Square Footage", type: "number", placeholder: "e.g. 2400" },
-      { key: "stories", label: "Stories", type: "select", options: [{ value: "1", label: "Single story" }, { value: "2", label: "Two story" }] },
-      { key: "bedrooms", label: "Bedrooms", type: "number", placeholder: "e.g. 3" },
-      { key: "bathrooms", label: "Bathrooms", type: "number", placeholder: "e.g. 2.5" },
-    ]
-  },
-  {
-    id: "garage",
-    fields: [
-      { key: "garage_cars", label: "Garage", type: "select", options: [{ value: "0", label: "No garage" }, { value: "1", label: "1-car" }, { value: "2", label: "2-car" }, { value: "3", label: "3-car" }, { value: "4", label: "4+ / RV bay" }] },
-      { key: "garage_has_shop", label: "Shop Space?", type: "boolean" },
-      { key: "garage_has_rv", label: "RV Storage?", type: "boolean" },
-    ]
-  },
 ];
 
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Expire sessions older than 24 hours
+    if (Date.now() - parsed.savedAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return parsed;
+  } catch { return null; }
+}
+
+function saveSession(sessionId, messages, isComplete, aiTurnCount) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      sessionId,
+      messages,
+      isComplete,
+      aiTurnCount,
+      savedAt: Date.now(),
+    }));
+  } catch {}
+}
+
 export function useChat() {
-  const [messages, setMessages] = useState([]);
+  const saved = useRef(loadSession());
+  const sessionId = useRef(saved.current?.sessionId || generateId());
+
+  const [messages, setMessages] = useState(saved.current?.messages || []);
   const [isLoading, setIsLoading] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
+  const [isComplete, setIsComplete] = useState(saved.current?.isComplete || false);
   const [submissionData, setSubmissionData] = useState(null);
-  const [fieldStep, setFieldStep] = useState(0); // which card to show next
   const [activeFields, setActiveFields] = useState(null);
   const [uploadPrompted, setUploadPrompted] = useState(false);
-  const sessionId = useRef(generateId());
-  const hasGreeted = useRef(false);
-  const aiTurnCount = useRef(0);
+  const hasGreeted = useRef(!!saved.current);
+  const aiTurnCount = useRef(saved.current?.aiTurnCount || 0);
+
+  // Persist session to localStorage whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveSession(sessionId.current, messages, isComplete, aiTurnCount.current);
+    }
+  }, [messages, isComplete]);
 
   // Only show field cards for first 2 turns (contact + location)
   const maybeShowNextCard = useCallback((turnCount) => {
     if (turnCount < 2) {
       setActiveFields(FIELD_STEPS[turnCount].fields);
-      setFieldStep(turnCount + 1);
     } else {
       setActiveFields(null);
     }
   }, []);
 
   const handleResponse = useCallback(async (data) => {
-    const aiMsg = {
-      role: "assistant",
-      text: data.message,
-      suggestedPlans: data.suggestedPlans || [],
-    };
+    const aiMsg = { role: "assistant", text: data.message };
     setMessages((prev) => [...prev, aiMsg]);
-    // Pulse upload button if AI is asking for a photo
     const asksForUpload = /upload|photo|picture|image|survey|aerial/i.test(data.message);
     setUploadPrompted(asksForUpload);
 
@@ -92,8 +98,8 @@ export function useChat() {
         });
       } catch (err) { console.error("Completion webhook failed:", err); }
       setIsComplete(true);
+      localStorage.removeItem(SESSION_KEY);
     } else {
-      // Show next field card after each AI turn
       const turn = aiTurnCount.current;
       aiTurnCount.current += 1;
       maybeShowNextCard(turn);
@@ -104,7 +110,6 @@ export function useChat() {
     if (isLoading || isComplete) return;
     setActiveFields(null);
     setMessages((prev) => [...prev, { role: "user", text }]);
-    // Fire partial lead when contact card submitted
     if (meta?.partial) {
       fetch("/api/partial", {
         method: "POST",
@@ -169,7 +174,6 @@ export function useChat() {
     if (hasGreeted.current) return;
     hasGreeted.current = true;
     setIsLoading(true);
-    fetch("/api/plans").then(r => r.json()).then(plans => { window._floorPlans = plans; }).catch(() => {});
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -179,14 +183,11 @@ export function useChat() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start");
       setMessages([{ role: "assistant", text: data.message }]);
-      // Show contact card immediately after greeting
       setActiveFields(FIELD_STEPS[0].fields);
-      setFieldStep(1);
       aiTurnCount.current = 1;
     } catch (err) {
       setMessages([{ role: "assistant", text: "Hi! I'm the Barnhaus Design Concierge. What's your name and best email?" }]);
       setActiveFields(FIELD_STEPS[0].fields);
-      setFieldStep(1);
       aiTurnCount.current = 1;
     } finally {
       setIsLoading(false);
