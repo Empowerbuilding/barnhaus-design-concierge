@@ -131,6 +131,45 @@ async function insertCRMNote(contactId, content) {
 
 function val(v) { return v && v !== "null" && v !== "undefined" ? v : null; }
 
+async function notifyVanessa(s) {
+  const token = process.env.VANESSA_DISCORD_TOKEN;
+  const channel = process.env.VANESSA_LEAD_ALERTS_CHANNEL;
+  if (!token || !channel || !s.email) return;
+  try {
+    const name = s.name || "Unknown";
+    const email = s.email || "—";
+    const phone = s.phone || "—";
+    const location = s.location || s.property_address || "—";
+    const budget = s.budget || s.construction_budget || "—";
+    const sqft = s.sqft || s.living || "—";
+    const style = s.style || s.aesthetic_style || "—";
+    const summary = s.summary || null;
+
+    const msg = [
+      `🏠 **New Design Concierge Lead — Follow Up Now**`,
+      ``,
+      `**Name:** ${name}`,
+      `**Email:** ${email}`,
+      `**Phone:** ${phone}`,
+      `**Location:** ${location}`,
+      `**Budget:** ${budget}`,
+      sqft !== "—" ? `**Size:** ${sqft} SF` : null,
+      style !== "—" ? `**Style:** ${style}` : null,
+      summary ? `
+**Summary:** ${summary}` : null,
+      ``,
+      `📧 Send a personalized follow-up email within the next hour.`,
+    ].filter(v => v !== null).join("
+");
+
+    await fetch(`https://discord.com/api/v10/channels/${channel}/messages`, {
+      method: "POST",
+      headers: { "Authorization": `Bot ${token}`, "Content-Type": "application/json", "User-Agent": "DiscordBot (barnhaus, 1.0)" },
+      body: JSON.stringify({ content: msg.slice(0, 1900) }),
+    });
+  } catch (err) { console.error("Vanessa notify error:", err.message); }
+}
+
 export async function sendDiscordNotification(s, partial = false) {
   if (!process.env.DISCORD_TOKEN || !process.env.DISCORD_CHANNEL) return;
   try {
