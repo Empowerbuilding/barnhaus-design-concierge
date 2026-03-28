@@ -55,11 +55,20 @@ export async function writeToCRM(s) {
     ).then(r => r.json());
 
     if (existing?.length > 0) {
+      // Fetch full existing contact to preserve lead_source
+      const existingFull = await fetch(
+        `${CRM_URL}/rest/v1/contacts?id=eq.${existing[0].id}&select=id,lead_source`,
+        { headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}` } }
+      ).then(r => r.json());
+      const existingLeadSource = existingFull?.[0]?.lead_source;
+      // Only update lead_source if contact doesn't already have one
+      const updatePayload = { notes: noteLines, lifecycle_stage: "lead", updated_at: new Date().toISOString() };
+      if (!existingLeadSource) updatePayload.lead_source = "design_concierge";
       // Update existing contact
       await fetch(`${CRM_URL}/rest/v1/contacts?id=eq.${existing[0].id}`, {
         method: "PATCH",
         headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify({ notes: noteLines, lead_source: "design_concierge", lifecycle_stage: "lead", updated_at: new Date().toISOString() }),
+        body: JSON.stringify(updatePayload),
       });
       console.log("CRM: updated existing contact", existing[0].id);
       if (noteLines) await insertCRMNote(existing[0].id, noteLines);
