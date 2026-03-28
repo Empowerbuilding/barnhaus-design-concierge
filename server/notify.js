@@ -168,15 +168,34 @@ export async function sendDiscordNotification(s, partial = false) {
       sections.push(imgLines.join("\n"));
     }
 
-    const content = tag + "\n\n" + sections.join("\n\n");
+    const fullContent = tag + "\n\n" + sections.join("\n\n");
 
-    const res = await fetch(`https://discord.com/api/v10/channels/${process.env.DISCORD_CHANNEL}/messages`, {
-      method: "POST",
-      headers: { "Authorization": `Bot ${process.env.DISCORD_TOKEN}`, "Content-Type": "application/json", "User-Agent": "DiscordBot (barnhaus, 1.0)" },
-      body: JSON.stringify({ content }),
-    });
-    const msg = await res.json();
-    return msg.id || null;
+    // Split into chunks of max 1900 chars to stay under Discord's 2000 char limit
+    const chunks = [];
+    let remaining = fullContent;
+    while (remaining.length > 0) {
+      if (remaining.length <= 1900) {
+        chunks.push(remaining);
+        break;
+      }
+      // Find last newline before 1900 chars
+      let splitAt = remaining.lastIndexOf("\n", 1900);
+      if (splitAt === -1) splitAt = 1900;
+      chunks.push(remaining.slice(0, splitAt));
+      remaining = remaining.slice(splitAt).trimStart();
+    }
+
+    let firstMsgId = null;
+    for (const chunk of chunks) {
+      const res = await fetch(`https://discord.com/api/v10/channels/${process.env.DISCORD_CHANNEL}/messages`, {
+        method: "POST",
+        headers: { "Authorization": `Bot ${process.env.DISCORD_TOKEN}`, "Content-Type": "application/json", "User-Agent": "DiscordBot (barnhaus, 1.0)" },
+        body: JSON.stringify({ content: chunk }),
+      });
+      const msg = await res.json();
+      if (!firstMsgId) firstMsgId = msg.id || null;
+    }
+    return firstMsgId;
   } catch (err) { console.error("Discord notification error:", err.message); return null; }
 }
 
