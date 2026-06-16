@@ -140,6 +140,7 @@ app.post("/api/chat", async (req, res) => {
     // Clean the response text — remove JSON blocks
     const cleanText = aiResponse
       .replace(/```json\s*\n?\s*\{[^`]*\}\s*\n?\s*```/gs, "")
+      .replace(/```[a-z_][^`]*?```/gs, "")
       .trim();
 
     // Resolve suggested plan details
