@@ -1,6 +1,56 @@
 const CRM_URL = "https://ejsnbluvkqocuchifdvp.supabase.co";
 const CRM_KEY = process.env.CRM_SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqc25ibHV2a3FvY3VjaGlmZHZwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjgwMTQ5NywiZXhwIjoyMDgyMzc3NDk3fQ.ZUTMAnnrwi7KPYYhkWL4Gexbn7ClrxOkG_CGWl2Q5X8";
 
+const PORTAL_URL = "https://xqvnpcxyyxxxydescfzw.supabase.co";
+const PORTAL_KEY = process.env.PORTAL_SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhxdm5wY3h5eXh4eHlkZXNjZnp3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjU4MDQzOSwiZXhwIjoyMDk4MTU2NDM5fQ.JR-MTbj8dPCH0stzW3PHzmo0On0JeUVXdc8TKcXRhrI";
+const PORTAL_ORG_ID = "1c466ccb-ef35-4ba4-bf00-5fcabf20edec";
+const PORTAL_LEAD_ALERTS_CHANNEL = "barnhaus-atlas-lead-alerts";
+
+export async function postToPortalLeadAlerts(s) {
+  try {
+    const name = s.name || "Unknown";
+    const email = s.email || "—";
+    const phone = s.phone || "—";
+    const location = s.location || "—";
+    const budget = s.budget || "—";
+    const sqft = s.sqft || null;
+    const style = s.style || null;
+    const summary = s.summary || null;
+
+    const lines = [
+      `🏠 **New Design Concierge Lead**`,
+      ``,
+      `**Name:** ${name}`,
+      `**Email:** ${email}`,
+      `**Phone:** ${phone}`,
+      `**Location:** ${location}`,
+      `**Budget:** ${budget}`,
+      sqft ? `**Size:** ${sqft} SF` : null,
+      style ? `**Style:** ${style}` : null,
+      summary ? `\n**Summary:** ${summary}` : null,
+    ].filter(v => v !== null).join("\n");
+
+    await fetch(`${PORTAL_URL}/rest/v1/portal_messages`, {
+      method: "POST",
+      headers: {
+        apikey: PORTAL_KEY,
+        Authorization: `Bearer ${PORTAL_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        channel_id: PORTAL_LEAD_ALERTS_CHANNEL,
+        org_id: PORTAL_ORG_ID,
+        sender_type: "agent",
+        sender_id: "design-concierge",
+        sender_name: "Design Concierge",
+        content: lines,
+        created_at: new Date().toISOString(),
+      }),
+    });
+  } catch (err) { console.error("Portal lead-alerts error:", err.message); }
+}
+
 export async function sendN8nWebhook(s) {
   if (!process.env.N8N_WEBHOOK) return;
   try {
