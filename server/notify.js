@@ -62,6 +62,38 @@ export async function sendN8nWebhook(s) {
   } catch (err) { console.error("n8n webhook error:", err.message); }
 }
 
+// Notify Atlas CRM task workflow — creates a Larry follow-up task for every new design concierge lead
+export async function notifyAtlasCrmTask(s) {
+  const name = s.name || "Unknown";
+  const email = s.email || "—";
+  const phone = s.phone || "—";
+  const location = s.location || "—";
+  const budget = s.budget || "—";
+  const sqft = s.sqft || null;
+  const style = s.style || null;
+  const summary = s.summary || null;
+  const lines = [
+    `🏠 **New Design Concierge Lead**`,
+    ``,
+    `**Name:** ${name}`,
+    `**Email:** ${email}`,
+    `**Phone:** ${phone}`,
+    `**Location:** ${location}`,
+    `**Budget:** ${budget}`,
+    sqft ? `**Size:** ${sqft} SF` : null,
+    style ? `**Style:** ${style}` : null,
+    summary ? `\n**Summary:** ${summary}` : null,
+  ].filter(v => v !== null).join("\n");
+  try {
+    await fetch("https://n8n.empowerbuilding.ai/webhook/lXtylBI3tPMZxubr/webhook/atlas-lead-task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: lines, channel_id: "barnhaus-atlas-lead-alerts" }),
+    });
+    console.log("Atlas CRM task webhook fired ✅");
+  } catch (err) { console.error("Atlas CRM task webhook error:", err.message); }
+}
+
 export async function writeToCRM(s) {
   try {
     // Handle both s.name (full name) and s.first_name/s.last_name
