@@ -232,21 +232,23 @@ Return ONLY valid JSON in this exact format, no extra text:
     if (!jsonMatch) throw new Error("No JSON in AI response");
     const drafts = JSON.parse(jsonMatch[0]);
 
-    const portalContent = [
+    const emailContent = [
       `📧 **Email Draft — ${name}**`,
       `**To:** ${s.email || "—"}`,
       `**Subject:** ${drafts.email_subject}`,
       ``,
       drafts.email_body,
-      ``,
-      `---`,
-      ``,
-      `💬 **Text Draft**`,
+    ].join("\n");
+
+    const smsContent = [
+      `💬 **Text Draft — ${name}**`,
+      `**To:** ${s.phone || "—"}`,
       ``,
       drafts.sms_text,
     ].join("\n");
 
-    await postToPortal(PORTAL_LARRY_CHANNEL, portalContent);
+    await postToPortal(PORTAL_LARRY_CHANNEL, emailContent);
+    await postToPortal(PORTAL_LARRY_CHANNEL, smsContent);
     console.log("Larry drafts posted to portal ✅");
   } catch (err) { console.error("Larry draft error:", err.message); }
 }
