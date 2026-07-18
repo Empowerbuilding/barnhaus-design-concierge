@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 import { chat } from "./claude.js";
 import { fetchFloorPlans, writeSubmission } from "./supabase.js";
-import { sendN8nWebhook, sendDiscordNotification, writeToCRM, deleteDiscordMessage, notifyVanessa, postToPortalLeadAlerts, notifyAtlasCrmTask } from "./notify.js";
+import { sendN8nWebhook, writeToCRM, postToPortalLeadAlerts, notifyAtlasCrmTask } from "./notify.js";
 import { uploadImage, analyzeImage } from "./upload.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -183,36 +183,24 @@ app.post("/api/complete", async (req, res) => {
         .filter(Boolean);
     }
 
-    // Delete partial Discord message if it exists
-    const session = sessionId ? sessions.get(sessionId) : null;
-    if (session?.partialDiscordMsgId) {
-      deleteDiscordMessage(session.partialDiscordMsgId).catch(() => {});
-      session.partialDiscordMsgId = null;
-    }
-
     // Write to Supabase + notify + CRM
     console.log("CRM write — submissionData keys:", Object.keys(submissionData || {}));
     console.log("CRM write — notes sample:", submissionData?.lifestyle_notes, "|", submissionData?.summary?.slice(0,80));
     const results = await Promise.allSettled([
       writeSubmission(submissionData),
       sendN8nWebhook(submissionData),
-      sendDiscordNotification(submissionData),
       writeToCRM(submissionData),
-      notifyVanessa(submissionData),
       postToPortalLeadAlerts(submissionData),
       notifyAtlasCrmTask(submissionData),
     ]);
 
-    const [dbResult, n8nResult, discordResult] = results;
+    const [dbResult, n8nResult] = results;
 
     if (dbResult.status === "rejected") {
       console.error("DB write failed:", dbResult.reason);
     }
     if (n8nResult.status === "rejected") {
       console.error("n8n webhook failed:", n8nResult.reason);
-    }
-    if (discordResult.status === "rejected") {
-      console.error("Discord notification failed:", discordResult.reason);
     }
 
     res.json({ success: true });
@@ -240,10 +228,9 @@ app.post("/api/partial", async (req, res) => {
     if (session) session.partialSaved = true;
     const [firstName, ...rest] = (name || "").trim().split(" ");
     const lastName = rest.join(" ") || "Unknown";
-    const partialMsgId = await sendDiscordNotification({ name, email, phone, status: "partial" });
-    if (session) session.partialDiscordMsgId = partialMsgId;
     writeSubmission({ first_name: firstName, last_name: lastName, name, email, phone, status: "partial" }).catch(e => console.error("Partial save err:", e));
     writeToCRM({ first_name: firstName, last_name: lastName, email, phone, notes: "Partial lead — Design Concierge interview in progress." }).catch(e => console.error("Partial CRM err:", e));
+    postToPortalLeadAlerts({ name, email, phone }, true).catch(e => console.error("Partial portal err:", e));
     res.json({ ok: true });
   } catch (err) {
     console.error("Partial endpoint error:", err);
