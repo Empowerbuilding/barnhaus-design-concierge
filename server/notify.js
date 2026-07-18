@@ -5,6 +5,9 @@ const PORTAL_URL = "https://xqvnpcxyyxxxydescfzw.supabase.co";
 const PORTAL_KEY = process.env.PORTAL_SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhxdm5wY3h5eXh4eHlkZXNjZnp3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjU4MDQzOSwiZXhwIjoyMDk4MTU2NDM5fQ.JR-MTbj8dPCH0stzW3PHzmo0On0JeUVXdc8TKcXRhrI";
 const PORTAL_ORG_ID = "1c466ccb-ef35-4ba4-bf00-5fcabf20edec";
 const PORTAL_LEAD_ALERTS_CHANNEL = "barnhaus-atlas-lead-alerts";
+const PORTAL_LARRY_CHANNEL = "barnhaus-vanessa-larry";
+const LARRY_SCHEDULER_URL = process.env.LARRY_SCHEDULER_URL || "https://crm.empowerbuilding.ai/book/30-minute-consultation";
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -162,6 +165,90 @@ export async function notifyAtlasCrmTask(s) {
     });
     console.log("Atlas CRM task webhook fired ✅");
   } catch (err) { console.error("Atlas CRM task webhook error:", err.message); }
+}
+
+// ── Draft email + text for Larry ────────────────────────────────────────────
+
+export async function draftAndPostToLarry(s) {
+  if (!ANTHROPIC_API_KEY) { console.warn("No ANTHROPIC_API_KEY — skipping Larry drafts"); return; }
+  try {
+    const name = s.name || "the lead";
+    const firstName = name.split(" ")[0];
+    const summaryBlock = [
+      s.summary && `Summary: ${s.summary}`,
+      s.location && `Location: ${s.location}`,
+      s.budget && `Budget: ${s.budget}`,
+      s.sqft && `Size: ${s.sqft} SF, ${s.stories || "1"} story`,
+      (s.bedrooms || s.bathrooms) && `Beds/Baths: ${s.bedrooms || "?"}bd / ${s.bathrooms || "?"}ba`,
+      s.style && `Style: ${s.style}`,
+      s.garage_cars && `Garage: ${s.garage_cars}-car`,
+      s.timeline && `Timeline: ${s.timeline}`,
+      s.land_owned === true ? "Land: Owned" : s.land_owned === false ? "Land: Not yet purchased" : null,
+      s.suggested_plan_names?.length && `Plans shown: ${s.suggested_plan_names.join(", ")}`,
+    ].filter(Boolean).join("\n");
+
+    const prompt = `You are Larry, an experienced sales consultant at Barnhaus Steel Builders. A new lead just completed our Design Concierge — an AI-powered home design interview.
+
+Here is their submission:
+${summaryBlock}
+
+Name: ${name}
+Email: ${s.email || "—"}
+Phone: ${s.phone || "—"}
+
+Write two things:
+
+1. A short, warm, personalized EMAIL from Larry to this prospect. Goal: get them on a call to discuss their vision. Reference specific details from their submission so it feels personal, not templated. End with a clear CTA to schedule a meeting: ${LARRY_SCHEDULER_URL}
+   - Subject line included
+   - Sign off as Larry from Barnhaus Steel Builders (larry@barnhaussteelbuilders.com, 210-517-7267)
+   - Keep it under 200 words, conversational, no fluff
+
+2. A short personalized TEXT MESSAGE (SMS) — under 160 characters ideally, max 320. Friendly, reference one specific detail from their submission, include the scheduler link: ${LARRY_SCHEDULER_URL}
+
+Return ONLY valid JSON in this exact format, no extra text:
+{
+  "email_subject": "...",
+  "email_body": "...",
+  "sms_text": "..."
+}`;
+
+    const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-opus-4-5",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    const aiData = await aiResp.json();
+    const raw = aiData?.content?.[0]?.text || "";
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON in AI response");
+    const drafts = JSON.parse(jsonMatch[0]);
+
+    const portalContent = [
+      `📧 **Email Draft — ${name}**`,
+      `**To:** ${s.email || "—"}`,
+      `**Subject:** ${drafts.email_subject}`,
+      ``,
+      drafts.email_body,
+      ``,
+      `---`,
+      ``,
+      `💬 **Text Draft**`,
+      ``,
+      drafts.sms_text,
+    ].join("\n");
+
+    await postToPortal(PORTAL_LARRY_CHANNEL, portalContent);
+    console.log("Larry drafts posted to portal ✅");
+  } catch (err) { console.error("Larry draft error:", err.message); }
 }
 
 export async function writeToCRM(s) {
