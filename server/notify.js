@@ -93,7 +93,7 @@ async function postToPortal(channelId, content) {
       apikey: PORTAL_KEY,
       Authorization: `Bearer ${PORTAL_KEY}`,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      Prefer: "return=representation",
     },
     body: JSON.stringify({
       channel_id: channelId,
@@ -109,17 +109,33 @@ async function postToPortal(channelId, content) {
     const text = await res.text();
     throw new Error(`Portal post failed (${res.status}): ${text}`);
   }
+  const rows = await res.json();
+  return rows?.[0]?.id || null;
+}
+
+export async function deletePortalMessage(messageId) {
+  if (!messageId) return;
+  try {
+    await fetch(`${PORTAL_URL}/rest/v1/portal_messages?id=eq.${messageId}`, {
+      method: "DELETE",
+      headers: {
+        apikey: PORTAL_KEY,
+        Authorization: `Bearer ${PORTAL_KEY}`,
+      },
+    });
+  } catch (err) { console.error("Portal delete error:", err.message); }
 }
 
 // ── Exports ──────────────────────────────────────────────────────────────────
 
-// Post full rich lead card to Portal lead alerts channel
+// Post full rich lead card to Portal lead alerts channel — returns message ID
 export async function postToPortalLeadAlerts(s, partial = false) {
   try {
     const content = buildRichMessage(s, partial);
-    await postToPortal(PORTAL_LEAD_ALERTS_CHANNEL, content);
-    console.log(`Portal lead-alerts posted (partial=${partial}) ✅`);
-  } catch (err) { console.error("Portal lead-alerts error:", err.message); }
+    const msgId = await postToPortal(PORTAL_LEAD_ALERTS_CHANNEL, content);
+    console.log(`Portal lead-alerts posted (partial=${partial}) ✅ id=${msgId}`);
+    return msgId;
+  } catch (err) { console.error("Portal lead-alerts error:", err.message); return null; }
 }
 
 // Fire n8n webhook (e.g. SMS to lead) — URL set via N8N_WEBHOOK env var

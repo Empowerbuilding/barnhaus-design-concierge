@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 import { chat } from "./claude.js";
 import { fetchFloorPlans, writeSubmission } from "./supabase.js";
-import { sendN8nWebhook, writeToCRM, postToPortalLeadAlerts, notifyAtlasCrmTask } from "./notify.js";
+import { sendN8nWebhook, writeToCRM, postToPortalLeadAlerts, deletePortalMessage, notifyAtlasCrmTask } from "./notify.js";
 import { uploadImage, analyzeImage } from "./upload.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -91,7 +91,7 @@ app.post("/api/chat", async (req, res) => {
 
     // Get or create session
     if (!sessions.has(sessionId)) {
-      sessions.set(sessionId, { history: [], partialSaved: false, imageUrls: [], partialDiscordMsgId: null });
+      sessions.set(sessionId, { history: [], partialSaved: false, imageUrls: [], partialPortalMsgId: null });
     }
     const session = sessions.get(sessionId);
     const history = session.history;
@@ -183,6 +183,13 @@ app.post("/api/complete", async (req, res) => {
         .filter(Boolean);
     }
 
+    // Delete partial Portal message now that full submission is coming
+    const session = sessionId ? sessions.get(sessionId) : null;
+    if (session?.partialPortalMsgId) {
+      deletePortalMessage(session.partialPortalMsgId).catch(() => {});
+      session.partialPortalMsgId = null;
+    }
+
     // Write to Supabase + notify + CRM
     console.log("CRM write — submissionData keys:", Object.keys(submissionData || {}));
     console.log("CRM write — notes sample:", submissionData?.lifestyle_notes, "|", submissionData?.summary?.slice(0,80));
@@ -230,7 +237,9 @@ app.post("/api/partial", async (req, res) => {
     const lastName = rest.join(" ") || "Unknown";
     writeSubmission({ first_name: firstName, last_name: lastName, name, email, phone, status: "partial" }).catch(e => console.error("Partial save err:", e));
     writeToCRM({ first_name: firstName, last_name: lastName, email, phone, notes: "Partial lead — Design Concierge interview in progress." }).catch(e => console.error("Partial CRM err:", e));
-    postToPortalLeadAlerts({ name, email, phone }, true).catch(e => console.error("Partial portal err:", e));
+    postToPortalLeadAlerts({ name, email, phone }, true).then(msgId => {
+      if (session && msgId) session.partialPortalMsgId = msgId;
+    }).catch(e => console.error("Partial portal err:", e));
     res.json({ ok: true });
   } catch (err) {
     console.error("Partial endpoint error:", err);
