@@ -193,12 +193,16 @@ app.post("/api/complete", async (req, res) => {
     // Write to Supabase + notify + CRM
     console.log("CRM write — submissionData keys:", Object.keys(submissionData || {}));
     console.log("CRM write — notes sample:", submissionData?.lifestyle_notes, "|", submissionData?.summary?.slice(0,80));
+
+    // writeToCRM first so we get the contact_id to pass to the task webhook
+    const contactId = await writeToCRM(submissionData);
+    console.log("CRM write complete — contact_id:", contactId);
+
     const results = await Promise.allSettled([
       writeSubmission(submissionData),
       sendN8nWebhook(submissionData),
-      writeToCRM(submissionData),
       postToPortalLeadAlerts(submissionData),
-      notifyAtlasCrmTask(submissionData),
+      notifyAtlasCrmTask(submissionData, contactId),
       draftAndPostToLarry(submissionData),
     ]);
 

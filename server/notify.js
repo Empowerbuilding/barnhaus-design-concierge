@@ -155,15 +155,15 @@ export async function sendN8nWebhook(s) {
 }
 
 // Create a Larry follow-up task via Atlas CRM task webhook
-export async function notifyAtlasCrmTask(s) {
+export async function notifyAtlasCrmTask(s, contactId = null) {
   try {
     const content = buildRichMessage(s, false);
-    await fetch("https://n8n.empowerbuilding.ai/webhook/lXtylBI3tPMZxubr/webhook/atlas-lead-task", {
+    await fetch("https://n8n.empowerbuilding.ai/webhook/atlas-lead-task", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, channel_id: PORTAL_LEAD_ALERTS_CHANNEL }),
+      body: JSON.stringify({ content, channel_id: PORTAL_LEAD_ALERTS_CHANNEL, contact_id: contactId }),
     });
-    console.log("Atlas CRM task webhook fired ✅");
+    console.log("Atlas CRM task webhook fired ✅ contact_id=", contactId);
   } catch (err) { console.error("Atlas CRM task webhook error:", err.message); }
 }
 
@@ -326,6 +326,7 @@ export async function writeToCRM(s) {
       });
       console.log("CRM: updated existing contact", matchedContact.id);
       if (noteLines) await insertCRMNote(matchedContact.id, noteLines);
+      return matchedContact.id;
     } else {
       const res = await fetch(`${CRM_URL}/rest/v1/contacts`, {
         method: "POST",
@@ -346,8 +347,9 @@ export async function writeToCRM(s) {
       const contactId = created?.[0]?.id;
       console.log("CRM: created contact", contactId);
       if (contactId && noteLines) await insertCRMNote(contactId, noteLines);
+      return contactId || null;
     }
-  } catch (err) { console.error("CRM write error:", err.message); }
+  } catch (err) { console.error("CRM write error:", err.message); return null; }
 }
 
 async function insertCRMNote(contactId, content) {
