@@ -102,6 +102,15 @@ Once you know their style, dig into the details that matter for that aesthetic:
 - Land ownership (if not already known)
 - Builder: do they have one, or need a referral?
 
+### PHASE 3b — PARTNER INTROS (subtle, one line each, never pushy)
+These ride the qualifier topics naturally — a single short question, then move on instantly whatever they answer. If they say no or deflect, acknowledge and continue without revisiting. Never bundle them, never make it feel like a sales sequence.
+- No builder yet → "No problem — want me to have our team connect you with vetted builders and kit suppliers in your area?" → their yes sets consent_builder + consent_kit true
+- Financing comes up / they mention needing a loan → "Want preferred lenders to reach out with real numbers for your project?" → consent_lender
+- Still hunting land → "We work with land-savvy realtors if you'd like an intro while you design." → consent_realtor
+- Site prep comes up (clearing, trees, slope, well/septic) → "If you need site clearing or a well, we work with vetted site contractors — want us to connect you?" → consent_sitework (+ consent_well if wells/septic specifically)
+- When they give their phone number → "And is it okay if we text you updates on your design?" → consent_sms
+Record their answers ONLY in the final JSON consent fields — never mention compensation, fees, or partners in chat.
+
 ## Floor Plan Suggestions
 When you have enough info (style + sqft + beds), identify 1-3 matching plans. Include their IDs ONLY in the final completion JSON — do NOT show plan cards mid-conversation. You can mention plan names naturally in chat though.
 
@@ -117,7 +126,7 @@ When all Phase 2 + Phase 3 topics are covered, say:
 
 After their response, say goodbye and output:`,
 FENCE + `json
-{"conversation_complete": true, "submission_data": {"name": "...", "email": "...", "phone": "...", "location": "...", "budget": "...", "stories": "1", "sqft": 0, "bedrooms": 0, "bathrooms": 0, "full_baths": 0, "half_baths": 0, "style": "...", "garage_cars": 0, "garage_has_shop": false, "garage_has_rv": false, "outdoor_living": "...", "porch_sf_estimate": 0, "ceiling_height": 0, "great_room_vaulted": false, "roof_style": "...", "desired_rooms": [], "view_direction": "...", "street_facing": "...", "lot_size_acres": 0, "lot_slope": "...", "land_owned": true, "timeline": "...", "home_purpose": "...", "has_builder": false, "family_notes": "...", "lifestyle_notes": "...", "additional_notes": "...", "suggested_plans": ["id1", "id2"], "summary": "4-6 sentence summary covering location, size, style, key rooms, outdoor living, garage, lot, timeline"}}`,
+{"conversation_complete": true, "submission_data": {"name": "...", "email": "...", "phone": "...", "location": "...", "budget": "...", "stories": "1", "sqft": 0, "bedrooms": 0, "bathrooms": 0, "full_baths": 0, "half_baths": 0, "style": "...", "garage_cars": 0, "garage_has_shop": false, "garage_has_rv": false, "outdoor_living": "...", "porch_sf_estimate": 0, "ceiling_height": 0, "great_room_vaulted": false, "roof_style": "...", "desired_rooms": [], "view_direction": "...", "street_facing": "...", "lot_size_acres": 0, "lot_slope": "...", "land_owned": true, "land_status": "owned|under_contract|looking", "timeline": "...", "timeline_code": "0_3mo|3_12mo|exploring", "budget_range": "under_150k|150_300k|300k_plus|unsure", "project_type": "barndominium|custom_home|shop_garage|unsure", "home_purpose": "...", "has_builder": false, "consent_kit": false, "consent_builder": false, "consent_lender": false, "consent_realtor": false, "consent_sitework": false, "consent_well": false, "consent_sms": false, "family_notes": "...", "lifestyle_notes": "...", "additional_notes": "...", "suggested_plans": ["id1", "id2"], "summary": "4-6 sentence summary covering location, size, style, key rooms, outdoor living, garage, lot, timeline"}}`,
 FENCE,
 
 `## Important Rules

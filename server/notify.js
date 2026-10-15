@@ -319,6 +319,19 @@ export async function writeToCRM(s) {
       const updatePayload = { notes: noteLines, lifecycle_stage: "lead", updated_at: new Date().toISOString() };
       if (!existingLeadSource) updatePayload.lead_source = "design_concierge";
       if (!existingEmail && s.email) updatePayload.email = s.email;
+      // Monetization routing + consent (10/14): monotonic — only set true, never clear
+      if (s.project_type) updatePayload.project_type = s.project_type;
+      if (s.budget_range) updatePayload.budget_range = s.budget_range;
+      if (s.timeline_code) updatePayload.timeline = s.timeline_code;
+      if (s.land_status || s.land_owned === true || s.land_owned === false) updatePayload.land_status = s.land_status || (s.land_owned ? "owned" : "looking");
+      for (const k of ["consent_kit","consent_builder","consent_lender","consent_realtor","consent_sitework","consent_well","consent_sms"]) {
+        if (s[k] === true) updatePayload[k] = true;
+      }
+      if (["consent_kit","consent_builder","consent_lender","consent_realtor","consent_sitework","consent_well","consent_sms"].some(k => s[k] === true)) {
+        updatePayload.consent_captured_at = new Date().toISOString();
+        updatePayload.consent_source_url = "https://design.barnhaussteelbuilders.com";
+        updatePayload.consent_text_version = "concierge-v1";
+      }
       await fetch(`${CRM_URL}/rest/v1/contacts?id=eq.${matchedContact.id}`, {
         method: "PATCH",
         headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -339,6 +352,21 @@ export async function writeToCRM(s) {
           lead_source: "design_concierge",
           lifecycle_stage: "lead",
           notes: noteLines,
+          // Monetization routing + consent (10/14)
+          project_type: s.project_type || null,
+          budget_range: s.budget_range || null,
+          timeline: s.timeline_code || null,
+          land_status: s.land_status || (s.land_owned === true ? "owned" : s.land_owned === false ? "looking" : null),
+          consent_kit: s.consent_kit === true,
+          consent_builder: s.consent_builder === true,
+          consent_lender: s.consent_lender === true,
+          consent_realtor: s.consent_realtor === true,
+          consent_sitework: s.consent_sitework === true,
+          consent_well: s.consent_well === true,
+          consent_sms: s.consent_sms === true,
+          consent_captured_at: ["consent_kit","consent_builder","consent_lender","consent_realtor","consent_sitework","consent_well","consent_sms"].some(k => s[k] === true) ? new Date().toISOString() : null,
+          consent_source_url: ["consent_kit","consent_builder","consent_lender","consent_realtor","consent_sitework","consent_well","consent_sms"].some(k => s[k] === true) ? "https://design.barnhaussteelbuilders.com" : null,
+          consent_text_version: ["consent_kit","consent_builder","consent_lender","consent_realtor","consent_sitework","consent_well","consent_sms"].some(k => s[k] === true) ? "concierge-v1" : null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }),

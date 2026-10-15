@@ -79,6 +79,11 @@ export default function FieldCard({ fields, onSubmit, onDismiss }) {
           Submit
         </button>
       </div>
+      {fields.some(f => f.key === "email") && (
+        <div style={{ marginTop: 10, fontSize: 11, color: "#666", lineHeight: 1.5, fontFamily: "'Inter',sans-serif" }}>
+          By continuing you agree to our <a href="https://barnhaussteelbuilders.com/terms" target="_blank" rel="noopener" style={{ color: "#888" }}>Terms of Service</a> and <a href="https://barnhaussteelbuilders.com/privacy" target="_blank" rel="noopener" style={{ color: "#888" }}>Privacy Policy</a>. If we connect you with a provider, we may be compensated.
+        </div>
+      )}
     </div>
   );
 }
