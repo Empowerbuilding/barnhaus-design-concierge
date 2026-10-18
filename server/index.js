@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 import { chat } from "./claude.js";
 import { fetchFloorPlans, writeSubmission } from "./supabase.js";
-import { sendN8nWebhook, writeToCRM, postToPortalLeadAlerts, deletePortalMessage, notifyAtlasCrmTask, draftAndPostToLarry } from "./notify.js";
+import { sendN8nWebhook, writeToCRM, postToPortalLeadAlerts, deletePortalMessage, notifyAtlasCrmTask, autoSendFollowUp } from "./notify.js";
 import { uploadImage, analyzeImage } from "./upload.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -203,7 +203,7 @@ app.post("/api/complete", async (req, res) => {
       sendN8nWebhook(submissionData),
       postToPortalLeadAlerts(submissionData),
       notifyAtlasCrmTask(submissionData, contactId),
-      draftAndPostToLarry(submissionData),
+      autoSendFollowUp(submissionData, contactId),
     ]);
 
     const [dbResult, n8nResult] = results;

@@ -167,14 +167,79 @@ export async function notifyAtlasCrmTask(s, contactId = null) {
   } catch (err) { console.error("Atlas CRM task webhook error:", err.message); }
 }
 
-// ── Draft email + text for Larry ────────────────────────────────────────────
+// ── Auto-send email + text follow-up to lead (10/18 — replaces manual drafts) ─
 
-export async function draftAndPostToLarry(s) {
-  if (!ANTHROPIC_API_KEY) { console.warn("No ANTHROPIC_API_KEY — skipping Larry drafts"); return; }
+const TELNYX_API_KEY = process.env.TELNYX_API_KEY; // set in Coolify env — never hardcode (GitHub push protection blocks it)
+const TELNYX_FROM_NUMBER = "+18304076296";
+const LARRY_EMAIL_FROM = "Larry Madison <larry@barnhaussteelbuilders.com>";
+const LARRY_OWNER_ID = "4e86efd2-6335-464b-b286-671b863a9dfc";
+const VANESSA_EMAIL_WEBHOOK = "https://n8n.empowerbuilding.ai/webhook/vanessa-send-email";
+const PORTAL_LARRY_SMS_CHANNEL = "barnhaus-vanessa-larry-sms";
+const LARRY_SIGNATURE = 'Thank you,\n\n<strong>Larry Madison</strong><br>\n🌐 <a href="https://barnhaussteelbuilders.com">Barnhaus Steel Builders</a><br>\n📞 830-407-6296';
+
+// In-process double-fire guard (double /api/complete POSTs)
+const recentDispatch = new Map(); // contactId -> dispatch timestamp
+const DISPATCH_TTL_MS = 10 * 60 * 1000;
+
+function normalizePhone(phone) {
+  const raw = String(phone || "").replace(/\D/g, "");
+  if (raw.length === 10) return "+1" + raw;
+  if (raw.length === 11 && raw.startsWith("1")) return "+" + raw;
+  return null;
+}
+
+function asciiOnly(text) {
+  // Telnyx/carrier gotcha: keep SMS ASCII-only (smart quotes, em dashes, emoji break delivery)
+  return String(text || "")
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u00A0\u2007\u202F]/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function stripClosers(body) {
+  // Defensive: strip AI sign-offs so the canonical Larry signature isn't doubled
+  // (same regex family Vanessa's send_email.py applies before signature injection)
+  return String(body || "")
+    .replace(/(?:^|\n|<br\s*\/?>)\s*(?:<br\s*\/?>\s*)*(?:Thank you(?:\s+again)?|Best(?:\s+regards)?|Warm regards|Kind regards|Sincerely|Regards|Thanks(?:\s+again)?|Cheers|Talk soon|Excited to connect|Looking forward(?:[^,\n!]{0,40})?)\s*[,!][\s\S]*/i, "")
+    .trimEnd();
+}
+
+async function hasRecentActivity(contactId, activityType, windowMs = 10 * 60 * 1000) {
+  if (!contactId) return false;
   try {
-    const name = s.name || "the lead";
-    const firstName = name.split(" ")[0];
-    const summaryBlock = [
+    const res = await fetch(
+      `${CRM_URL}/rest/v1/activities?contact_id=eq.${contactId}&activity_type=eq.${activityType}&order=created_at.desc&limit=1&select=id,created_at`,
+      { headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}` } }
+    );
+    const rows = await res.json();
+    const last = Array.isArray(rows) && rows[0];
+    if (!last) return false;
+    return Date.now() - new Date(last.created_at).getTime() < windowMs;
+  } catch { return false; }
+}
+
+async function fetchContact(contactId) {
+  if (!contactId) return null;
+  try {
+    const res = await fetch(
+      `${CRM_URL}/rest/v1/contacts?id=eq.${contactId}&select=id,first_name,last_name,owner_id,sms_opt_out&limit=1`,
+      { headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}` } }
+    );
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows[0] || null : null;
+  } catch { return null; }
+}
+
+// Draft email + SMS via Claude — same voice as before, signature now auto-appended
+async function draftFollowUp(s) {
+  const name = s.name || "the lead";
+  const firstName = name.split(" ")[0];
+  const summaryBlock = [
       s.summary && `Summary: ${s.summary}`,
       s.location && `Location: ${s.location}`,
       s.budget && `Budget: ${s.budget}`,
@@ -200,10 +265,10 @@ Write two things:
 
 1. A short, warm, personalized EMAIL from Larry to this prospect. Goal: get them on a call to discuss their vision. Reference specific details from their submission so it feels personal, not templated. End with a clear CTA to schedule a meeting: ${LARRY_SCHEDULER_URL}
    - Subject line included
-   - Sign off as Larry from Barnhaus Steel Builders (larry@barnhaussteelbuilders.com, 210-517-7267)
+   - Do NOT write a signature, sign-off, or contact info at the end — one is appended automatically
    - Keep it under 200 words, conversational, no fluff
 
-2. A short personalized TEXT MESSAGE (SMS) — under 160 characters ideally, max 320. Friendly, reference one specific detail from their submission, include the scheduler link: ${LARRY_SCHEDULER_URL}
+2. A short personalized TEXT MESSAGE (SMS) — under 160 characters ideally, max 320. Friendly, reference one specific detail from their submission, include the scheduler link: ${LARRY_SCHEDULER_URL}. ASCII characters only — no em dashes, curly quotes, or emoji.
 
 Return ONLY valid JSON in this exact format, no extra text:
 {
@@ -226,31 +291,200 @@ Return ONLY valid JSON in this exact format, no extra text:
       }),
     });
 
+    if (!aiResp.ok) throw new Error(`Anthropic ${aiResp.status}: ${(await aiResp.text()).slice(0, 200)}`);
     const aiData = await aiResp.json();
     const raw = aiData?.content?.[0]?.text || "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in AI response");
     const drafts = JSON.parse(jsonMatch[0]);
+    if (!drafts.email_subject || !drafts.email_body || !drafts.sms_text) {
+      throw new Error("AI draft missing required fields");
+    }
+    return drafts;
+}
 
-    const emailContent = [
-      `📧 **Email Draft — ${name}**`,
-      `**To:** ${s.email || "—"}`,
-      `**Subject:** ${drafts.email_subject}`,
-      ``,
-      drafts.email_body,
+// ── Send paths ───────────────────────────────────────────────────────────────
+
+async function sendEmailToLead(s, drafts, contactId) {
+  if (!s.email) return { status: "skipped", detail: "no email address on submission" };
+  if (await hasRecentActivity(contactId, "email_sent")) {
+    return { status: "skipped", detail: "contact was emailed in the last 10 min (double-fire guard)" };
+  }
+  const body = stripClosers(drafts.email_body) + "\n\n" + LARRY_SIGNATURE;
+  try {
+    const res = await fetch(VANESSA_EMAIL_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: s.email,
+        subject: drafts.email_subject,
+        body,
+        from_addr: LARRY_EMAIL_FROM,
+        user: "larry",
+        contact_id: contactId,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success !== true) {
+      throw new Error(`webhook ${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
+    }
+    return { status: "sent", detail: `resend_id=${data.resend_id}` };
+  } catch (err) {
+    return { status: "failed", detail: err.message };
+  }
+}
+
+async function sendSmsToLead(s, drafts, contactId, contact) {
+  if (!TELNYX_API_KEY) return { status: "failed", detail: "TELNYX_API_KEY env var not set on concierge server" };
+  const to = normalizePhone(s.phone);
+  if (!to) return { status: "skipped", detail: `phone "${s.phone || ""}" is not a valid US number` };
+  if (contact?.sms_opt_out) return { status: "skipped", detail: "contact has SMS opt-out flag" };
+  if (await hasRecentActivity(contactId, "sms_sent")) {
+    return { status: "skipped", detail: "contact was texted in the last 10 min (double-fire guard)" };
+  }
+
+  const text = asciiOnly(drafts.sms_text).slice(0, 320);
+  if (!text) return { status: "skipped", detail: "SMS text empty after sanitize" };
+
+  try {
+    // 1. Send via Telnyx (main rep line — same number Larry/Vanessa texts come from)
+    const res = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TELNYX_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: TELNYX_FROM_NUMBER, to, text }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Telnyx ${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
+    const telnyxId = data?.data?.id || "unknown";
+
+    // 2. CRM activity log + contact patch (mirrors Vanessa's send_sms.py direct-send path)
+    const now = new Date().toISOString();
+    if (contactId) {
+      const crmHeaders = { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" };
+      await fetch(`${CRM_URL}/rest/v1/activities`, {
+        method: "POST",
+        headers: crmHeaders,
+        body: JSON.stringify({
+          contact_id: contactId,
+          activity_type: "sms_sent",
+          title: "SMS sent: Initial outreach",
+          description: text,
+          created_at: now,
+          user_id: LARRY_OWNER_ID,
+          metadata: { sent_by: "larry", source: "design_concierge", auto: true, telnyx_message_id: telnyxId },
+        }),
+      }).catch(e => console.error("SMS CRM activity log error:", e.message));
+      const patch = { last_contacted_at: now, last_contact_type: "sms_sent", last_sms_rep: "larry" };
+      if (!contact?.owner_id) patch.owner_id = LARRY_OWNER_ID;
+      await fetch(`${CRM_URL}/rest/v1/contacts?id=eq.${contactId}`, {
+        method: "PATCH",
+        headers: crmHeaders,
+        body: JSON.stringify(patch),
+      }).catch(e => console.error("SMS contact patch error:", e.message));
+    }
+
+    // 3. Thread card in Larry's SMS channel (so the thread shows when the lead replies)
+    const contactName = contact ? `${contact.first_name || ""} ${contact.last_name || ""}`.trim() : null;
+    const smsCardContent = [
+      "📱 **SMS Sent**",
+      `**To:** ${contactName || to} (${to})`,
+      `**From:** ${TELNYX_FROM_NUMBER}`,
+      "",
+      "```",
+      text.slice(0, 1500),
+      "```",
     ].join("\n");
+    try {
+      await fetch(`${PORTAL_URL}/rest/v1/portal_messages`, {
+        method: "POST",
+        headers: { apikey: PORTAL_KEY, Authorization: `Bearer ${PORTAL_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({
+          channel_id: PORTAL_LARRY_SMS_CHANNEL,
+          org_id: PORTAL_ORG_ID,
+          sender_type: "system",
+          sender_name: "Design Concierge",
+          content: smsCardContent,
+          processed: true,
+          created_at: now,
+          metadata: {
+            approval_state: "sent",
+            direction: "outbound",
+            to,
+            contact_phone: to,
+            contact_name: contactName,
+            contact_id: contactId,
+            source: "design_concierge",
+            auto: true,
+          },
+        }),
+      });
+    } catch (e) { console.error("SMS thread card error:", e.message); }
 
-    const smsContent = [
-      `💬 **Text Draft — ${name}**`,
-      `**To:** ${s.phone || "—"}`,
-      ``,
-      drafts.sms_text,
-    ].join("\n");
+    return { status: "sent", detail: `telnyx_id=${telnyxId}` };
+  } catch (err) {
+    return { status: "failed", detail: err.message };
+  }
+}
 
-    await postToPortal(PORTAL_LARRY_CHANNEL, emailContent);
-    await postToPortal(PORTAL_LARRY_CHANNEL, smsContent);
-    console.log("Larry drafts posted to portal ✅");
-  } catch (err) { console.error("Larry draft error:", err.message); }
+// ── Orchestrator: draft → auto-send both → notify Larry's channel ────────────
+
+export async function autoSendFollowUp(s, contactId = null) {
+  const name = s.name || "Unknown";
+
+  // Double-fire guards
+  const lastDispatch = recentDispatch.get(contactId || s.email || s.phone || "") || 0;
+  if (Date.now() - lastDispatch < DISPATCH_TTL_MS) {
+    console.log(`Auto follow-up skipped — already dispatched for ${name} <10 min ago`);
+    return;
+  }
+  recentDispatch.set(contactId || s.email || s.phone || "", Date.now());
+
+  if (!ANTHROPIC_API_KEY) {
+    await postToPortal(PORTAL_LARRY_CHANNEL,
+      `⚠️ **Auto follow-up NOT sent — ${name}**\nNo ANTHROPIC_API_KEY on concierge server. Follow up manually; CRM task already created.`).catch(() => {});
+    return;
+  }
+
+  let drafts;
+  try {
+    drafts = await draftFollowUp(s);
+  } catch (err) {
+    console.error("Draft generation failed:", err.message);
+    await postToPortal(PORTAL_LARRY_CHANNEL,
+      `⚠️ **Auto follow-up FAILED — ${name}**\nDraft generation error: ${err.message}\n\nCRM task already created for manual follow-up.`).catch(() => {});
+    return;
+  }
+
+  const contact = await fetchContact(contactId);
+  const [emailResult, smsResult] = await Promise.all([
+    sendEmailToLead(s, drafts, contactId),
+    sendSmsToLead(s, drafts, contactId, contact),
+  ]);
+
+  console.log(`Auto follow-up ${name}: email=${emailResult.status} (${emailResult.detail}) sms=${smsResult.status} (${smsResult.detail})`);
+
+  const icon = (r) => r.status === "sent" ? "✅" : r.status === "skipped" ? "⏭️" : "⚠️";
+  const lines = [
+    `🤖 **Auto follow-up — ${name}**`,
+    "_Concierge completion → email + text handled automatically. No action needed._",
+    "",
+    `${icon(emailResult)} **Email ${emailResult.status}** → ${s.email || "—"}`,
+  ];
+  if (drafts.email_subject) lines.push(`**Subject:** ${drafts.email_subject}`);
+  if (emailResult.status !== "sent" && emailResult.detail) lines.push(`_${emailResult.detail}_`);
+  lines.push("");
+  lines.push(`${icon(smsResult)} **Text ${smsResult.status}** → ${normalizePhone(s.phone) || s.phone || "—"}`);
+  if (smsResult.status === "sent" && drafts.sms_text) lines.push(`> ${asciiOnly(drafts.sms_text).slice(0, 220)}`);
+  if (smsResult.status !== "sent" && smsResult.detail) lines.push(`_${smsResult.detail}_`);
+
+  // Failure fallback: include full drafts so Larry can send manually
+  if (emailResult.status === "failed" || smsResult.status === "failed") {
+    lines.push("", "⚠️ **Something failed — drafts below for manual send:**", "",
+      `📧 **Email draft** (to ${s.email || "—"})`, `**Subject:** ${drafts.email_subject}`, "", drafts.email_body, "",
+      `💬 **Text draft** (to ${s.phone || "—"})`, "```", asciiOnly(drafts.sms_text).slice(0, 500), "```");
+  }
+
+  await postToPortal(PORTAL_LARRY_CHANNEL, lines.join("\n")).catch(e => console.error("Larry notification post error:", e.message));
 }
 
 export async function writeToCRM(s) {
