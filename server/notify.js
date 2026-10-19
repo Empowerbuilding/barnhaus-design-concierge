@@ -263,16 +263,12 @@ Phone: ${s.phone || "—"}
 
 Write two things:
 
-1. A short, low-key EMAIL from Larry to this prospect. It must read like a quick personal note from a real person — NOT a sales email. The goal is a REPLY, not a booking. Rules:
-   - 60–100 words max
-   - Reference ONE specific detail from their submission so it's clearly personal
-   - Ask exactly ONE simple question that's easy to answer in a sentence. Go DEEPER on something they shared — never re-ask anything the submission already answers (they already told us land status, budget, size, style, timeline)
-   - Good question directions: the lot/site (slope, views, utilities, access), what matters most to them in the design, who the home is for / how they'll use it, or what's driving their timeline
-   - Do NOT include any scheduling link, meeting ask, or pitch. The booking link goes in the SMS, not the email
-   - Subject line: short, casual, references their project specifically (e.g. "question about your Canyon Lake build")
+1. A short, warm, personalized EMAIL from Larry to this prospect. Goal: get them on a call to discuss their vision. Reference specific details from their submission so it feels personal, not templated. End with a clear CTA to schedule a meeting: ${LARRY_SCHEDULER_URL}
+   - Subject line included
    - Do NOT write a signature, sign-off, or contact info at the end — one is appended automatically
+   - Keep it under 200 words, conversational, no fluff
 
-2. A short personalized TEXT MESSAGE (SMS) — under 160 characters ideally, max 320. Friendly, reference one specific detail from their submission, include the scheduler link: ${LARRY_SCHEDULER_URL}. ASCII characters only — no em dashes, curly quotes, or emoji. The SMS must NOT ask the same question the email asks.
+2. A short personalized TEXT MESSAGE (SMS) — under 160 characters ideally, max 320. Friendly, reference one specific detail from their submission, include the scheduler link: ${LARRY_SCHEDULER_URL}. ASCII characters only — no em dashes, curly quotes, or emoji.
 
 Return ONLY valid JSON in this exact format, no extra text:
 {
