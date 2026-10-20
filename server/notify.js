@@ -322,6 +322,10 @@ async function sendEmailToLead(s, drafts, contactId) {
         from_addr: LARRY_EMAIL_FROM,
         user: "larry",
         contact_id: contactId,
+        // Automated-flow marker: CRM email activity gets source+auto so the SMS
+        // auto-responder knows this was NOT a human rep touch (Joanie Croteau 10/19)
+        source: "design_concierge",
+        auto: true,
       }),
     });
     const data = await res.json().catch(() => ({}));
