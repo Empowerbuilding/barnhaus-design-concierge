@@ -527,11 +527,15 @@ export async function writeToCRM(s) {
       s.imageAnalyses?.length && `Image analysis:\n${s.imageAnalyses.map((a, i) => `Image ${i + 1}: ${a.analysis}`).join("\n")}`,
     ].filter(Boolean).join("\n");
 
-    // Check if contact already exists by email
-    const existing = await fetch(
-      `${CRM_URL}/rest/v1/contacts?email=eq.${encodeURIComponent(s.email)}&select=id&limit=1`,
+    // Check if contact already exists by email — case-INSENSITIVE (11/2 Laura Lytle:
+    // submitted "Narcissus6@hotmail.com" vs stored "narcissus6@hotmail.com" — the
+    // eq. match missed, the phone fallback had no phone, and the create hit the
+    // unique-email constraint → contact_id null → no follow-up email/SMS, no Larry task)
+    const emailNorm = (s.email || "").trim().toLowerCase();
+    const existing = emailNorm ? await fetch(
+      `${CRM_URL}/rest/v1/contacts?email=ilike.${encodeURIComponent(emailNorm)}&select=id&limit=1`,
       { headers: { apikey: CRM_KEY, Authorization: `Bearer ${CRM_KEY}` } }
-    ).then(r => r.json());
+    ).then(r => r.json()) : null;
 
     // Phone fallback if no email match
     let matchedContact = existing?.[0] || null;
@@ -585,7 +589,7 @@ export async function writeToCRM(s) {
         body: JSON.stringify({
           first_name: firstName,
           last_name: lastName,
-          email: s.email,
+          email: emailNorm || s.email || null,
           phone: s.phone || null,
           lead_source: "design_concierge",
           lifecycle_stage: "lead",
